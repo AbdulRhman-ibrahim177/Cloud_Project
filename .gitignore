@@ -1,0 +1,7 @@
+
+kafka/consumer-samples/*
+!kafka/consumer-samples/consumer.py
+
+
+kafka/producer-samples/*
+!kafka/producer-samples/producer.py
