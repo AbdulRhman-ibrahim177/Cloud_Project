@@ -15,3 +15,16 @@ services:
       - name: stt-route
         paths:
           - /api/stt
+  - name: document-reader-service
+    url: http://document-reader-service:8000
+    routes:
+      - name: document-reader-routes
+        paths:
+          - /api/documents
+          - /api/documents/
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - DELETE
+

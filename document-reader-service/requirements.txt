@@ -1,6 +1,9 @@
 fastapi
 uvicorn[standard]
-kafka-python
 pydantic
-python-multipart
-PyYAML
+pyyaml
+kafka-python
+boto3
+SQLAlchemy
+psycopg2-binary     # لو هتستخدم PostgreSQL
+# أو لو هتستخدم SQLite بس مش محتاج psycopg2-binary

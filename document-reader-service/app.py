@@ -4,11 +4,14 @@ import json
 from pathlib import Path
 from typing import List
 
+import boto3
 import yaml
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from kafka import KafkaProducer
+
+from db import SessionLocal, init_db, Document  # <-- NEW
 
 # --------------------------
 # Load config
@@ -28,11 +31,28 @@ TOPIC_NOTES = config["kafka"]["topics"]["notes_generated"]
 
 BASE_DIR = Path(config["storage"]["base_dir"])
 DOCS_DIR = BASE_DIR / "files"
-META_DIR = BASE_DIR / "meta"
 NOTES_DIR = BASE_DIR / "notes"
 
-for d in (DOCS_DIR, META_DIR, NOTES_DIR):
+for d in (DOCS_DIR, NOTES_DIR):
     d.mkdir(parents=True, exist_ok=True)
+
+USE_S3 = bool(config["storage"].get("use_s3", False))
+S3_CONFIG = config["storage"].get("s3", {})
+
+# --------------------------
+# S3 client (اختياري)
+# --------------------------
+s3_client = None
+if USE_S3:
+    s3_client = boto3.client(
+        "s3",
+        region_name=S3_CONFIG.get("region"),
+        endpoint_url=S3_CONFIG.get("endpoint_url") or None,
+        # الكريدنشيالز ممكن تيجي من ENV أو profile
+    )
+    S3_BUCKET = S3_CONFIG["bucket"]
+else:
+    S3_BUCKET = None
 
 # --------------------------
 # Kafka Producer
@@ -61,6 +81,7 @@ class DocumentMetadata(BaseModel):
     filename: str
     content_type: str
     size: int
+    status: str
 
 
 class NotesResponse(BaseModel):
@@ -68,30 +89,27 @@ class NotesResponse(BaseModel):
     notes: str
 
 
-app = FastAPI(title="Document Reader Service")
+app = FastAPI(title="Document Reader Service with S3 + DB")
+
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
 
 
 # --------------------------
 # Helper functions
 # --------------------------
-def _meta_path(doc_id: str) -> Path:
-    return META_DIR / f"{doc_id}.json"
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def _notes_path(doc_id: str) -> Path:
     return NOTES_DIR / f"{doc_id}.txt"
-
-
-def _file_path(doc_id: str, filename: str) -> Path:
-    return DOCS_DIR / f"{doc_id}__{filename}"
-
-
-def _load_metadata(doc_id: str) -> dict:
-    path = _meta_path(doc_id)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Document not found")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 # --------------------------
@@ -101,91 +119,175 @@ def _load_metadata(doc_id: str) -> dict:
 # POST /api/documents/upload
 @app.post("/api/documents/upload", response_model=DocumentMetadata)
 async def upload_document(file: UploadFile = File(...)):
-    doc_id = str(uuid.uuid4())
-    dest_path = _file_path(doc_id, file.filename)
+    from fastapi import Depends
+    from fastapi import Request  # just to keep fastapi happy
 
-    contents = await file.read()
-    with open(dest_path, "wb") as f:
-        f.write(contents)
+    # manually get session (عشان مبنستخدمش Depends هنا)
+    db = SessionLocal()
 
-    meta = {
-        "id": doc_id,
-        "filename": file.filename,
-        "content_type": file.content_type,
-        "size": len(contents),
-    }
-    with open(_meta_path(doc_id), "w", encoding="utf-8") as f:
-        json.dump(meta, f)
+    try:
+        doc_id = str(uuid.uuid4())
+        contents = await file.read()
+        size = len(contents)
 
-    # Event: document.uploaded
-    send_event(
-        TOPIC_UPLOADED,
-        {
+        # 1) تخزين الملف: S3 أو local
+        s3_key = None
+        if USE_S3 and s3_client is not None:
+            s3_key = f"documents/{doc_id}/{file.filename}"
+            s3_client.put_object(
+                Bucket=S3_BUCKET,
+                Key=s3_key,
+                Body=contents,
+                ContentType=file.content_type or "application/octet-stream",
+            )
+        else:
+            dest_path = DOCS_DIR / f"{doc_id}__{file.filename}"
+            with open(dest_path, "wb") as f:
+                f.write(contents)
+
+        # 2) حفظ metadata في DB
+        doc = Document(
+            id=doc_id,
+            filename=file.filename,
+            content_type=file.content_type or "application/octet-stream",
+            size=size,
+            s3_key=s3_key,
+            status="uploaded",
+        )
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+
+        # 3) إرسال event لـ Kafka (document.uploaded)
+        payload = {
             "document_id": doc_id,
             "filename": file.filename,
-            "content_type": file.content_type,
-            "size": len(contents),
-        },
-    )
+            "content_type": file.content_type or "application/octet-stream",
+            "size": size,
+            "s3_key": s3_key,
+        }
+        send_event(TOPIC_UPLOADED, payload)
 
-    return meta
+        return DocumentMetadata(
+            id=doc.id,
+            filename=doc.filename,
+            content_type=doc.content_type,
+            size=doc.size,
+            status=doc.status,
+        )
+    finally:
+        db.close()
 
 
 # GET /api/documents/{id}
 @app.get("/api/documents/{doc_id}", response_model=DocumentMetadata)
 async def get_document(doc_id: str):
-    meta = _load_metadata(doc_id)
-    return meta
+    db = SessionLocal()
+    try:
+        doc = db.query(Document).filter(Document.id == doc_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        return DocumentMetadata(
+            id=doc.id,
+            filename=doc.filename,
+            content_type=doc.content_type,
+            size=doc.size,
+            status=doc.status,
+        )
+    finally:
+        db.close()
 
 
 # GET /api/documents/{id}/notes
 @app.get("/api/documents/{doc_id}/notes", response_model=NotesResponse)
 async def get_notes(doc_id: str):
-    path = _notes_path(doc_id)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Notes not found")
-    with open(path, "r", encoding="utf-8") as f:
-        notes = f.read()
-    return NotesResponse(id=doc_id, notes=notes)
+    db = SessionLocal()
+    try:
+        doc = db.query(Document).filter(Document.id == doc_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        if not doc.notes_path:
+            raise HTTPException(status_code=404, detail="Notes not found")
+
+        notes_path = Path(doc.notes_path)
+        if not notes_path.exists():
+            raise HTTPException(status_code=404, detail="Notes file missing on disk")
+
+        with open(notes_path, "r", encoding="utf-8") as f:
+            notes = f.read()
+
+        return NotesResponse(id=doc_id, notes=notes)
+    finally:
+        db.close()
 
 
 # POST /api/documents/{id}/regenerate-notes
 @app.post("/api/documents/{doc_id}/regenerate-notes")
 async def regenerate_notes(doc_id: str):
-    meta = _load_metadata(doc_id)
+    db = SessionLocal()
+    try:
+        doc = db.query(Document).filter(Document.id == doc_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
 
-    # هنا ممكن تبعت Event جديد لو worker بيعتمد عليه
-    send_event(
-        TOPIC_PROCESSED,
-        {
-            "document_id": doc_id,
-            "action": "regenerate_notes",
-        },
-    )
+        # Event جديد عشان الـ worker يعيد توليد الـ notes
+        send_event(
+            TOPIC_UPLOADED,  # ممكن تسيبه على نفس التوبيك document.uploaded
+            {
+                "document_id": doc_id,
+                "filename": doc.filename,
+                "content_type": doc.content_type,
+                "size": doc.size,
+                "s3_key": doc.s3_key,
+                "action": "regenerate_notes",
+            },
+        )
 
-    return {"status": "queued", "document_id": doc_id}
+        # Optional: عدّل status
+        doc.status = "queued"
+        db.commit()
+
+        return {"status": "queued", "document_id": doc_id}
+    finally:
+        db.close()
 
 
 # GET /api/documents
 @app.get("/api/documents", response_model=List[DocumentSummary])
 async def list_documents():
-    docs: List[DocumentSummary] = []
-    for meta_file in META_DIR.glob("*.json"):
-        with open(meta_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        docs.append(DocumentSummary(id=data["id"], filename=data["filename"]))
-    return docs
+    db = SessionLocal()
+    try:
+        docs = db.query(Document).all()
+        return [DocumentSummary(id=d.id, filename=d.filename) for d in docs]
+    finally:
+        db.close()
 
 
 # DELETE /api/documents/{id}
 @app.delete("/api/documents/{doc_id}")
 async def delete_document(doc_id: str):
-    meta = _load_metadata(doc_id)
-    file_path = _file_path(doc_id, meta["filename"])
-    notes_path = _notes_path(doc_id)
+    db = SessionLocal()
+    try:
+        doc = db.query(Document).filter(Document.id == doc_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
 
-    for p in [file_path, _meta_path(doc_id), notes_path]:
-        if p.exists():
-            p.unlink()
+        # 1) امسح من S3 لو موجود
+        if USE_S3 and s3_client is not None and doc.s3_key:
+            s3_client.delete_object(Bucket=S3_BUCKET, Key=doc.s3_key)
 
-    return {"deleted": True, "id": doc_id}
+        # 2) امسح ملفات local (notes مثلاً)
+        if doc.notes_path:
+            p = Path(doc.notes_path)
+            if p.exists():
+                p.unlink()
+
+        # 3) امسح من DB
+        db.delete(doc)
+        db.commit()
+
+        return {"deleted": True, "id": doc_id}
+    finally:
+        db.close()
