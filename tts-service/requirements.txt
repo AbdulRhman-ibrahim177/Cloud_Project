@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+kafka-python
+boto3
+gtts
+pyyaml

@@ -1,0 +1,17 @@
+_format_version: "2.1"
+_transform: true
+
+services:
+  - name: tts-service
+    url: http://tts-service:8002
+    routes:
+      - name: tts-route
+        paths:
+          - /api/tts
+
+  - name: stt-service
+    url: http://stt-service:8003
+    routes:
+      - name: stt-route
+        paths:
+          - /api/stt

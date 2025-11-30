@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  # --------------------------------------------------
+  # API GATEWAY (KONG)
+  # --------------------------------------------------
+  kong:
+    image: kong:latest
+    depends_on:
+      - tts-service
+      - stt-service
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yaml
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      - ./api-gateway/kong.yaml:/etc/kong/kong.yaml
+
+  # --------------------------------------------------
+  # TTS SERVICE
+  # --------------------------------------------------
+  tts-service:
+    build: ./tts-service
+    container_name: tts-service
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./tts-service:/app
+
+  # --------------------------------------------------
+  # STT SERVICE
+  # --------------------------------------------------
+  stt-service:
+    build: ./stt-service
+    container_name: stt-service
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./stt-service:/app
+
+  # --------------------------------------------------
+  # PROMETHEUS
+  # --------------------------------------------------
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  # --------------------------------------------------
+  # GRAFANA
+  # --------------------------------------------------
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana:/var/lib/grafana"
+
+networks:
+  default:
+    name: cloud_network
