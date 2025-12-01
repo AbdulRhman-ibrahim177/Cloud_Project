@@ -10,7 +10,8 @@ sleep 10
 
 echo "📌 Creating Kafka topics..."
 cd kafka
-./create-topics.sh
+./cre
+ate-topics.sh
 cd ..
 
 echo "🚀 Starting application services..."
