@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+kafka-python
+pydantic
+python-multipart
+PyYAML
+openai
+requests
+langchain
+langchain-openai
+sqlalchemy
+psycopg2-binary
+boto3
+alembic
