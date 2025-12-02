@@ -15,14 +15,8 @@ try:
 except Exception as e:
     print(f"[ERROR] Failed to create KafkaProducer: {e}", file=sys.stderr)
     sys.exit(1)
-
-
-def produce_chat_message(user_id: str, message: str):
-    payload = {
-        "user_id": user_id,
-        "message": message,
-        "timestamp": int(time.time() * 1000)
-    }
+    
+def produce_chat_message(payload: dict):
     try:
         future = producer.send(TOPIC, value=payload)
         record_metadata = future.get(timeout=10)
