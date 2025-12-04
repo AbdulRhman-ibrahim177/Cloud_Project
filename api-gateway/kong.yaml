@@ -29,3 +29,10 @@ services:
       - name: quiz-route
         paths:
           - /api/quiz
+
+- name: chat-service
+    url: http://chat-service:8000
+    routes:
+      - name: chat-route
+        paths:
+          - /api/chat
