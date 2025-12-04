@@ -15,3 +15,10 @@ services:
       - name: stt-route
         paths:
           - /api/stt
+          
+  - name: chat-service
+    url: http://chat-service:8000
+    routes:
+      - name: chat-route
+        paths:
+          - /api/chat
