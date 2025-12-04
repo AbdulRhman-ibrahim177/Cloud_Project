@@ -15,3 +15,17 @@ services:
       - name: stt-route
         paths:
           - /api/stt
+
+  - name: document-reader-service
+    url: http://document-reader-service:8000
+    routes:
+      - name: document-route
+        paths:
+          - /api/documents
+
+  - name: quiz-service
+    url: http://quiz-service:8003
+    routes:
+      - name: quiz-route
+        paths:
+          - /api/quiz
