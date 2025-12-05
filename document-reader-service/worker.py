@@ -2,6 +2,8 @@ import json
 import time
 from io import BytesIO
 from pathlib import Path
+from PyPDF2 import PdfReader
+import docx
 
 import boto3
 import yaml
@@ -45,20 +47,63 @@ producer = KafkaProducer(
 )
 
 
+def extract_text_from_pdf_bytes(data: bytes) -> str:
+    """حاول تقرأ نص حقيقي من PDF، لو فشل هنرجع للـ fallback."""
+    try:
+        reader = PdfReader(BytesIO(data))
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            text += page_text + "\n"
+        return text
+    except Exception as e:
+        print(f"[worker] PDF extract error: {e}")
+        return ""
+
+
+def extract_text_from_docx_bytes(data: bytes) -> str:
+    """استخراج نص من DOCX باستخدام python-docx."""
+    try:
+        f = BytesIO(data)
+        doc = docx.Document(f)
+        return "\n".join(p.text for p in doc.paragraphs)
+    except Exception as e:
+        print(f"[worker] DOCX extract error: {e}")
+        return ""
+
+
 def process_document_bytes(document_id: str, filename: str, data: bytes) -> str:
     """
-    هنا المفروض تعمل:
-      - PDF / DOCX parsing
-      - Text extraction
-      - Summarization عبر LLM أو أي lib
-    دلوقتي هنعمل ملخص بسيط placeholder.
+    - لو PDF → نحاول نطلع نص حقيقي
+    - لو DOCX → نستخدم python-docx
+    - لو حاجة تانية → نفترض إنها نص عادي
+    ولو كل ده فشل → نرجع للـ preview القديم من الـ bytes
     """
-    text_preview = data.decode(errors="ignore")
+    ext = Path(filename).suffix.lower()
+    text = ""
+
+    if ext == ".pdf":
+        text = extract_text_from_pdf_bytes(data)
+    elif ext in [".docx", ".doc"]:
+        text = extract_text_from_docx_bytes(data)
+    else:
+        # مثلاً TXT أو أي فورمات تانية
+        try:
+            text = data.decode("utf-8", errors="ignore")
+        except Exception:
+            text = ""
+
+    # لو ماقدرناش نطلع نص بأي طريقة → fallback للـ raw preview
+    if not text.strip():
+        text = data.decode(errors="ignore")
+
+    # "ملخص" بسيط: أول 500–700 character من النص الحقيقي
     summary = (
         f"Auto-generated notes for document {filename}.\n\n"
-        f"Preview:\n{text_preview[:500]}"
+        f"Preview:\n{text[:700]}"
     )
     return summary
+
 
 
 def run_worker():
