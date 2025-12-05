@@ -19,9 +19,15 @@ services:
   - name: document-reader-service
     url: http://document-reader-service:8000
     routes:
-      - name: document-route
+      - name: document-reader-routes
         paths:
           - /api/documents
+          - /api/documents/
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - DELETE
 
   - name: quiz-service
     url: http://quiz-service:8003
@@ -30,9 +36,9 @@ services:
         paths:
           - /api/quiz
 
-- name: chat-service
+  - name: chat-service
     url: http://chat-service:8000
     routes:
       - name: chat-route
         paths:
-          - /api/chat
+          - /api/chat
