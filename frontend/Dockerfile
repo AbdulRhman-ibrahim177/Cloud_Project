@@ -13,11 +13,14 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy project
 COPY . .
 
-# Expose port
-EXPOSE 8001
+# Create necessary directories
+RUN mkdir -p /app/media /app/staticfiles
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+# Expose port
+EXPOSE 8000
+
+# Run migrations and start server
+CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]

@@ -17,4 +17,4 @@ ENV AWS_REGION="us-east-1"
 # Expose port
 EXPOSE 8003
 
-# Start the service
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8003"]

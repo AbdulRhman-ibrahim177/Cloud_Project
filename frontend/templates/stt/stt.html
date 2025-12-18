@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}STT - Cloud Project{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">
+    <i class="bi bi-mic"></i> Speech to Text
+</h2>
+
+<div class="row">
+    <div class="col-md-8 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Upload Audio</h5>
+            </div>
+            <div class="card-body">
+                <form id="sttForm">
+                    <div class="mb-3">
+                        <label for="audioFile" class="form-label">Select Audio File</label>
+                        <input class="form-control form-control-lg" type="file" id="audioFile" accept="audio/*" required>
+                        <small class="text-muted">Formats: MP3, WAV, OGG, FLAC, M4A</small>
+                    </div>
+                    
+                    <div id="transcriptionStatus"></div>
+                    
+                    <button type="button" class="btn btn-primary btn-lg w-100" onclick="transcribeAudio()">
+                        <i class="bi bi-mic-fill"></i> Transcribe
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Service Status</h6>
+            </div>
+            <div class="card-body">
+                <p>
+                    Status: 
+                    <span class="badge bg-{% if service_status.status == 'healthy' %}success{% else %}danger{% endif %}">
+                        {{ service_status.status|upper }}
+                    </span>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h5>Recent Transcriptions</h5>
+        {% if transcriptions %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trans in transcriptions %}
+                            <tr>
+                                <td>{{ trans.filename }}</td>
+                                <td>
+                                    <span class="badge bg-{% if trans.status == 'completed' %}success{% elif trans.status == 'queued' %}warning{% else %}danger{% endif %}">
+                                        {{ trans.status|upper }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-info" onclick="viewTranscription('{{ trans.id }}')">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">No transcriptions yet</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function transcribeAudio() {
+    const fileInput = document.getElementById('audioFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select an audio file');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const statusDiv = document.getElementById('transcriptionStatus');
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split"></i> Processing audio...</div>';
+    
+    fetch('/stt/api/upload/', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            statusDiv.innerHTML = '<div class="alert alert-danger">Error: ' + data.error + '</div>';
+        } else {
+            statusDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle"></i> 
+                    Transcription queued! ID: ${data.transcription_id}
+                </div>
+            `;
+            fileInput.value = '';
+        }
+    })
+    .catch(error => {
+        statusDiv.innerHTML = '<div class="alert alert-danger">Error: ' + error + '</div>';
+    });
+}
+
+function viewTranscription(id) {
+    fetch(`/stt/api/${id}/`)
+    .then(response => response.json())
+    .then(data => {
+        alert('Text: ' + (data.text || 'Processing...'));
+    });
+}
+</script>
+{% endblock %}

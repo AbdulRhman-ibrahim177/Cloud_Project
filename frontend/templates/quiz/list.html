@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}Quiz - Cloud Project{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-question-circle"></i> Quizzes</h2>
+    <a href="/quiz/generate/" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Create New Quiz
+    </a>
+</div>
+
+{% if quizzes %}
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Difficulty</th>
+                    <th>Questions</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for quiz in quizzes %}
+                    <tr>
+                        <td>{{ quiz.title }}</td>
+                        <td>
+                            <span class="badge bg-{% if quiz.difficulty == 'easy' %}info{% elif quiz.difficulty == 'medium' %}warning{% else %}danger{% endif %}">
+                                {{ quiz.difficulty|upper }}
+                            </span>
+                        </td>
+                        <td>{{ quiz.num_questions }}</td>
+                        <td>
+                            <span class="badge bg-{% if quiz.status == 'completed' %}success{% elif quiz.status == 'in_progress' %}warning{% else %}secondary{% endif %}">
+                                {{ quiz.status|upper }}
+                            </span>
+                        </td>
+                        <td>{{ quiz.score|default:"--" }}</td>
+                        <td>
+                            <a href="/quiz/{{ quiz.id }}/" class="btn btn-sm btn-primary">
+                                <i class="bi bi-play-fill"></i> Start
+                            </a>
+                            {% if quiz.status == 'completed' %}
+                                <a href="/quiz/{{ quiz.id }}/results/" class="btn btn-sm btn-info">
+                                    <i class="bi bi-graph-up"></i> Results
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="alert alert-info text-center">
+        <p>No quizzes yet. Create one to get started!</p>
+        <a href="/quiz/generate/" class="btn btn-primary">Create Your First Quiz</a>
+    </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Cloud Project - Home{% endblock %}
+
+{% block content %}
+<div class="text-center mb-5">
+    <h1 class="display-4 mb-3" style="color: #333;">
+        <i class="bi bi-cloud-check"></i> Cloud Project
+    </h1>
+    <p class="lead text-muted">Unified Platform for Document Processing, AI Chat, Speech & Quiz Services</p>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card service-card">
+            <div class="service-icon">
+                <i class="bi bi-chat-dots"></i>
+            </div>
+            <h5>Chat</h5>
+            <p>Interact with AI-powered chat</p>
+            <a href="/chat/" class="btn btn-primary btn-sm">Start Chat</a>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card service-card">
+            <div class="service-icon">
+                <i class="bi bi-file-text"></i>
+            </div>
+            <h5>Documents</h5>
+            <p>Upload and process documents</p>
+            <a href="/documents/" class="btn btn-primary btn-sm">Upload Document</a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card service-card">
+            <div class="service-icon">
+                <i class="bi bi-mic"></i>
+            </div>
+            <h5>Speech to Text</h5>
+            <p>Convert audio files to text</p>
+            <a href="/stt/" class="btn btn-primary btn-sm">Transcribe Audio</a>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card service-card">
+            <div class="service-icon">
+                <i class="bi bi-volume-up"></i>
+            </div>
+            <h5>Text to Speech</h5>
+            <p>Convert text to audio</p>
+            <a href="/tts/" class="btn btn-primary btn-sm">Synthesize Speech</a>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6 mx-auto">
+        <div class="card service-card">
+            <div class="service-icon">
+                <i class="bi bi-question-circle"></i>
+            </div>
+            <h5>Quiz Generator</h5>
+            <p>Create quizzes from documents</p>
+            <a href="/quiz/" class="btn btn-primary btn-sm">Create Quiz</a>
+        </div>
+    </div>
+</div>
+
+<div class="alert alert-info mt-5">
+    <h5><i class="bi bi-info-circle"></i> About This Platform</h5>
+    <p class="mb-0">
+        This is a unified frontend for the Cloud Project microservices. All services are integrated
+        and ready to use. Each feature is powered by dedicated backend services running on the cloud.
+    </p>
+</div>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block title %}Quiz Results - Cloud Project{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">
+    <i class="bi bi-graph-up"></i> Quiz Results
+</h2>
+
+<div id="resultsContainer">
+    <div class="text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading results...</p>
+    </div>
+</div>
+
+<script>
+const quizId = '{{ quiz_id }}';
+
+// Load results
+fetch(`/quiz/api/${quizId}/`)
+.then(response => response.json())
+.then(data => {
+    if (data.error) {
+        document.getElementById('resultsContainer').innerHTML = 
+            '<div class="alert alert-danger">Error loading results: ' + data.error + '</div>';
+    } else {
+        displayResults(data);
+    }
+});
+
+function displayResults(quiz) {
+    const scorePercentage = ((quiz.score || 0) * 100).toFixed(1);
+    const scoreColor = scorePercentage >= 70 ? 'success' : scorePercentage >= 50 ? 'warning' : 'danger';
+    
+    let html = `
+        <div class="card mb-4">
+            <div class="card-header bg-${scoreColor} text-white">
+                <h4 class="mb-0">${quiz.title}</h4>
+            </div>
+            <div class="card-body text-center">
+                <h1 style="font-size: 4rem; color: #667eea;">${scorePercentage}%</h1>
+                <h4>Your Score</h4>
+                <p class="text-muted">Quiz completed on ${new Date().toLocaleDateString()}</p>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5>Total Questions</h5>
+                        <h3>${quiz.num_questions}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5>Difficulty</h5>
+                        <h3 class="text-uppercase">${quiz.difficulty}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="btn-group w-100" role="group">
+            <a href="/quiz/" class="btn btn-secondary">
+                <i class="bi bi-list"></i> All Quizzes
+            </a>
+            <a href="/quiz/generate/" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> New Quiz
+            </a>
+        </div>
+    `;
+    
+    document.getElementById('resultsContainer').innerHTML = html;
+}
+</script>
+{% endblock %}

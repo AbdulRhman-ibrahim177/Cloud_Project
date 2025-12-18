@@ -13,4 +13,6 @@ COPY . .
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8002
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8002"]

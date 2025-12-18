@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+
+{% block title %}Generate Quiz - Cloud Project{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">
+    <i class="bi bi-plus-circle"></i> Generate New Quiz
+</h2>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form id="generateForm">
+                    <div class="mb-3">
+                        <label for="documentId" class="form-label">Document ID</label>
+                        <input type="text" class="form-control" id="documentId" placeholder="Enter document ID" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="documentNotes" class="form-label">Document Notes/Content</label>
+                        <textarea class="form-control" id="documentNotes" rows="5" placeholder="Paste document content or notes..." required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="quizTitle" class="form-label">Quiz Title</label>
+                        <input type="text" class="form-control" id="quizTitle" placeholder="Optional: Give your quiz a title">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="numQuestions" class="form-label">Number of Questions</label>
+                            <input type="number" class="form-control" id="numQuestions" value="5" min="1" max="50" required>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="difficulty" class="form-label">Difficulty Level</label>
+                            <select class="form-control" id="difficulty" required>
+                                <option value="easy">Easy</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="hard">Hard</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Question Types</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qTypeMultiple" value="multiple_choice" checked>
+                            <label class="form-check-label" for="qTypeMultiple">Multiple Choice</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qTypeTrue" value="true_false">
+                            <label class="form-check-label" for="qTypeTrue">True/False</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qTypeShort" value="short_answer">
+                            <label class="form-check-label" for="qTypeShort">Short Answer</label>
+                        </div>
+                    </div>
+                    
+                    <div id="generateStatus"></div>
+                    
+                    <button type="button" class="btn btn-primary btn-lg w-100" onclick="generateQuiz()">
+                        <i class="bi bi-lightning-fill"></i> Generate Quiz
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function generateQuiz() {
+    const documentId = document.getElementById('documentId').value.trim();
+    const notes = document.getElementById('documentNotes').value.trim();
+    const title = document.getElementById('quizTitle').value.trim();
+    const numQuestions = parseInt(document.getElementById('numQuestions').value);
+    const difficulty = document.getElementById('difficulty').value;
+    
+    if (!documentId || !notes) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    // Get selected question types
+    const questionTypes = [];
+    if (document.getElementById('qTypeMultiple').checked) questionTypes.push('multiple_choice');
+    if (document.getElementById('qTypeTrue').checked) questionTypes.push('true_false');
+    if (document.getElementById('qTypeShort').checked) questionTypes.push('short_answer');
+    
+    const statusDiv = document.getElementById('generateStatus');
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split"></i> Generating quiz...</div>';
+    
+    fetch('/quiz/api/generate/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            document_id: documentId,
+            notes: notes,
+            title: title || undefined,
+            num_questions: numQuestions,
+            difficulty: difficulty,
+            question_types: questionTypes.length > 0 ? questionTypes : undefined
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            statusDiv.innerHTML = '<div class="alert alert-danger">Error: ' + data.error + '</div>';
+        } else {
+            statusDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> Quiz generated successfully!</div>';
+            setTimeout(() => {
+                window.location.href = '/quiz/' + data.quiz_id + '/';
+            }, 2000);
+        }
+    })
+    .catch(error => {
+        statusDiv.innerHTML = '<div class="alert alert-danger">Error: ' + error + '</div>';
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block title %}Quiz - Cloud Project{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">
+    <i class="bi bi-pencil-square"></i> Take Quiz
+</h2>
+
+<div id="quizContainer">
+    <div class="text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading quiz...</p>
+    </div>
+</div>
+
+<script>
+const quizId = '{{ quiz_id }}';
+
+// Load quiz
+fetch(`/quiz/api/${quizId}/`)
+.then(response => response.json())
+.then(data => {
+    if (data.error) {
+        document.getElementById('quizContainer').innerHTML = 
+            '<div class="alert alert-danger">Error loading quiz: ' + data.error + '</div>';
+    } else {
+        displayQuiz(data);
+    }
+});
+
+function displayQuiz(quiz) {
+    let html = `
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">${quiz.title}</h4>
+                <small>Difficulty: ${quiz.difficulty}</small>
+            </div>
+            <div class="card-body">
+                <form id="quizForm">
+    `;
+    
+    quiz.questions.forEach((question, index) => {
+        html += `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h6>${index + 1}. ${question.question_text}</h6>
+        `;
+        
+        if (question.question_type === 'multiple_choice') {
+            question.options.forEach(option => {
+                html += `
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="q${question.id}" value="${option}" id="q${question.id}_${option}">
+                        <label class="form-check-label" for="q${question.id}_${option}">
+                            ${option}
+                        </label>
+                    </div>
+                `;
+            });
+        } else if (question.question_type === 'true_false') {
+            html += `
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="q${question.id}" value="true" id="q${question.id}_true">
+                    <label class="form-check-label" for="q${question.id}_true">True</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="q${question.id}" value="false" id="q${question.id}_false">
+                    <label class="form-check-label" for="q${question.id}_false">False</label>
+                </div>
+            `;
+        } else if (question.question_type === 'short_answer') {
+            html += `
+                <input type="text" class="form-control" name="q${question.id}" placeholder="Your answer here...">
+            `;
+        }
+        
+        html += `</div></div>`;
+    });
+    
+    html += `
+                    <button type="button" class="btn btn-success btn-lg w-100" onclick="submitQuiz()">
+                        <i class="bi bi-check-circle"></i> Submit Quiz
+                    </button>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('quizContainer').innerHTML = html;
+}
+
+function submitQuiz() {
+    const formData = new FormData(document.getElementById('quizForm'));
+    const answers = {};
+    
+    for (let [key, value] of formData.entries()) {
+        answers[key] = value;
+    }
+    
+    fetch(`/quiz/api/${quizId}/submit/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ answers })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error submitting quiz: ' + data.error);
+        } else {
+            alert('Quiz submitted! Redirecting to results...');
+            window.location.href = `/quiz/${quizId}/results/`;
+        }
+    });
+}
+</script>
+{% endblock %}

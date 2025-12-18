@@ -15,8 +15,9 @@ COPY . .
 
 ENV PYTHONUNBUFFERED=1
 
-# Resource requirements: 2 CPU, 4GB RAM
-# Set in docker-compose or k8s
+EXPOSE 8005
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8005"]
 
 # Default command - run API server
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8003"]

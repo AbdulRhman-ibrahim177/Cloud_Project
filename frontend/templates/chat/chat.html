@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}Chat - Cloud Project{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">
+    <i class="bi bi-chat-dots"></i> Chat with AI
+</h2>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body" style="height: 500px; overflow-y: auto;" id="chatBox">
+                <div class="text-center text-muted py-5">
+                    <p>Start a conversation...</p>
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="messageInput" 
+                           placeholder="Type your message..." 
+                           onkeypress="if(event.key==='Enter') sendMessage()">
+                    <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Chat Info</h6>
+            </div>
+            <div class="card-body">
+                <p><strong>User ID:</strong> {{ user_id }}</p>
+                <p><strong>Status:</strong> <span class="badge bg-success">Connected</span></p>
+                <button class="btn btn-outline-danger btn-sm w-100" onclick="clearChat()">
+                    <i class="bi bi-trash"></i> Clear Chat
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const userId = { user_id };
+
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    
+    if (!message) return;
+    
+    // Add user message to chat
+    addMessageToChat('user', message);
+    input.value = '';
+    
+    // Show loading
+    showLoading();
+    
+    // Send to backend
+    fetch('/chat/api/send/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            user_id: userId,
+            message: message
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        if (data.error) {
+            addMessageToChat('error', 'Error: ' + data.error);
+        } else {
+            addMessageToChat('ai', data.response || 'No response');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        addMessageToChat('error', 'Connection error: ' + error);
+    });
+}
+
+function addMessageToChat(sender, text) {
+    const chatBox = document.getElementById('chatBox');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `mb-3 d-flex ${sender === 'user' ? 'justify-content-end' : 'justify-content-start'}`;
+    
+    const bgClass = sender === 'user' ? 'bg-primary text-white' : 
+                   sender === 'error' ? 'bg-danger text-white' : 'bg-light';
+    
+    messageDiv.innerHTML = `
+        <div class="p-3 rounded" style="max-width: 70%; background-color: ${sender === 'user' ? '#667eea' : sender === 'error' ? '#ff6b6b' : '#f0f0f0'}; color: ${sender === 'user' || sender === 'error' ? 'white' : 'black'};">
+            ${text}
+        </div>
+    `;
+    chatBox.appendChild(messageDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function clearChat() {
+    document.getElementById('chatBox').innerHTML = `
+        <div class="text-center text-muted py-5">
+            <p>Start a conversation...</p>
+        </div>
+    `;
+}
+
+function showLoading() {
+    const chatBox = document.getElementById('chatBox');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'loading';
+    loadingDiv.className = 'mb-3 d-flex justify-content-start';
+    loadingDiv.innerHTML = `
+        <div class="p-3 rounded bg-light">
+            <div class="spinner-border spinner-border-sm" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    `;
+    chatBox.appendChild(loadingDiv);
+}
+
+function hideLoading() {
+    const loading = document.getElementById('loading');
+    if (loading) loading.remove();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+
+{% block title %}TTS - Cloud Project{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">
+    <i class="bi bi-volume-up"></i> Text to Speech
+</h2>
+
+<div class="row">
+    <div class="col-md-8 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Synthesize Speech</h5>
+            </div>
+            <div class="card-body">
+                <form id="ttsForm">
+                    <div class="mb-3">
+                        <label for="textInput" class="form-label">Text to Convert</label>
+                        <textarea class="form-control form-control-lg" id="textInput" rows="5" placeholder="Enter text to convert to speech..." required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="voiceSelect" class="form-label">Voice</label>
+                        <select class="form-control" id="voiceSelect">
+                            <option value="default">Default Voice</option>
+                            {% for voice in voices %}
+                                <option value="{{ voice }}">{{ voice }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div id="synthesisStatus"></div>
+                    
+                    <button type="button" class="btn btn-primary btn-lg w-100" onclick="synthesizeText()">
+                        <i class="bi bi-volume-up-fill"></i> Synthesize
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h5>Recent Syntheses</h5>
+        {% if syntheses %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Text</th>
+                            <th>Voice</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for syn in syntheses %}
+                            <tr>
+                                <td>{{ syn.text|truncatewords:10 }}</td>
+                                <td>{{ syn.voice }}</td>
+                                <td>
+                                    <span class="badge bg-{% if syn.status == 'completed' %}success{% elif syn.status == 'queued' %}warning{% else %}danger{% endif %}">
+                                        {{ syn.status|upper }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if syn.status == 'completed' %}
+                                        <button class="btn btn-sm btn-primary" onclick="playSynthesis('{{ syn.id }}')">
+                                            <i class="bi bi-play-fill"></i>
+                                        </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">No syntheses yet</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function synthesizeText() {
+    const text = document.getElementById('textInput').value.trim();
+    const voice = document.getElementById('voiceSelect').value;
+    
+    if (!text) {
+        alert('Please enter text to synthesize');
+        return;
+    }
+    
+    const statusDiv = document.getElementById('synthesisStatus');
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split"></i> Synthesizing...</div>';
+    
+    fetch('/tts/api/synthesize/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            text: text,
+            voice: voice
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            statusDiv.innerHTML = '<div class="alert alert-danger">Error: ' + data.error + '</div>';
+        } else {
+            statusDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle"></i> 
+                    Synthesis queued! ID: ${data.synthesis_id}
+                </div>
+            `;
+            document.getElementById('textInput').value = '';
+        }
+    })
+    .catch(error => {
+        statusDiv.innerHTML = '<div class="alert alert-danger">Error: ' + error + '</div>';
+    });
+}
+
+function playSynthesis(id) {
+    fetch(`/tts/api/${id}/`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.s3_key || data.audio_url) {
+            const audio = new Audio(data.audio_url || '/media/' + data.s3_key);
+            audio.play();
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -2,37 +2,95 @@ version: "3.9"
 
 services:
   # --------------------------------------------------
-  # API GATEWAY (KONG)
+  # FRONTEND (Django)
+  # Port: 8000
   # --------------------------------------------------
-  kong:
-    image: kong:latest
-    depends_on:
-      - tts-service
-      - stt-service
-      - document-reader-service
-      - quiz-service
-    environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yaml
+  frontend:
+    build: ./frontend
+    container_name: cloud-frontend
     ports:
       - "8000:8000"
-      - "8001:8001"
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=django-insecure-dev-key-change-in-production
+      - ALLOWED_HOSTS=localhost,127.0.0.1,frontend
+      - CHAT_SERVICE_URL=http://chat-service:8001
+      - DOCUMENT_SERVICE_URL=http://document-reader-service:8002
+      - STT_SERVICE_URL=http://stt-service:8003
+      - TTS_SERVICE_URL=http://tts-service:8004
+      - QUIZ_SERVICE_URL=http://quiz-service:8005
     volumes:
-      - ./api-gateway/kong.yaml:/etc/kong/kong.yaml
+      - ./frontend:/app
+      - frontend-media:/app/media
+      - frontend-static:/app/staticfiles
+    depends_on:
+      - chat-service
+      - document-reader-service
+      - stt-service
+      - tts-service
+      - quiz-service
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # --------------------------------------------------
-  # TTS SERVICE
+  # CHAT SERVICE
+  # Port: 8001
   # --------------------------------------------------
-  tts-service:
-    build: ./tts-service
-    container_name: tts-service
+  chat-service:
+    build: ./chat-service
+    container_name: chat-service
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - KAFKA_BROKERS=kafka:29092
+    volumes:
+      - ./chat-service:/app
+    depends_on:
+      - kafka
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # --------------------------------------------------
+  # DOCUMENT READER SERVICE
+  # Port: 8002
+  # --------------------------------------------------
+  document-reader-service:
+    build: ./document-reader-service
+    container_name: document-reader-service
     ports:
       - "8002:8002"
     volumes:
-      - ./tts-service:/app
+      - ./document-reader-service:/app
+      - document-data:/data/documents
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SERVICE_HOST=0.0.0.0
+      - SERVICE_PORT=8002
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      - kafka
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # --------------------------------------------------
-  # STT SERVICE
+  # STT SERVICE (Speech to Text)
+  # Port: 8003
   # --------------------------------------------------
   stt-service:
     build: ./stt-service
@@ -41,47 +99,77 @@ services:
       - "8003:8003"
     volumes:
       - ./stt-service:/app
-
-  # --------------------------------------------------
-  # DOCUMENT READER SERVICE
-  # --------------------------------------------------
-  document-reader-service:
-    build: ./document-reader-service
-    container_name: document-reader-service
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./document-reader-service:/app
-      - document-data:/data/documents
     environment:
       - PYTHONUNBUFFERED=1
+      - SERVICE_HOST=0.0.0.0
+      - SERVICE_PORT=8003
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      - kafka
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/api/stt/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # --------------------------------------------------
+  # TTS SERVICE (Text to Speech)
+  # Port: 8004
+  # --------------------------------------------------
+  tts-service:
+    build: ./tts-service
+    container_name: tts-service
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./tts-service:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SERVICE_HOST=0.0.0.0
+      - SERVICE_PORT=8004
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      - kafka
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # --------------------------------------------------
   # QUIZ SERVICE
+  # Port: 8005
   # --------------------------------------------------
   quiz-service:
     build: ./quiz-service
     container_name: quiz-service
     ports:
-      - "8004:8003"
+      - "8005:8005"
     volumes:
       - ./quiz-service:/app
       - quiz-data:/data/quizzes
     environment:
       - PYTHONUNBUFFERED=1
+      - SERVICE_HOST=0.0.0.0
+      - SERVICE_PORT=8005
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      # Database
-      - DB_HOST=${DB_HOST:-postgres}
+      - KAFKA_BROKERS=kafka:29092
+      - DB_HOST=${DB_HOST:-localhost}
       - DB_PORT=${DB_PORT:-5432}
       - DB_NAME=${DB_NAME:-quiz_service}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      # S3 Storage
       - S3_BUCKET=${S3_BUCKET:-quiz-service-storage-dev}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+    depends_on:
+      - kafka
     deploy:
       resources:
         limits:
@@ -90,31 +178,120 @@ services:
         reservations:
           cpus: '1'
           memory: 2048M
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # --------------------------------------------------
-  # PROMETHEUS
+  # ZOOKEEPER (Kafka dependency)
+  # Port: 2181 (internal only)
+  # --------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_INIT_LIMIT: 5
+    ports:
+      - "2181:2181"
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # --------------------------------------------------
+  # KAFKA (Message Queue)
+  # Port: 9092 (external), 29092 (internal)
+  # --------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    ports:
+      - "9092:9092"
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions.sh", "--bootstrap-server=localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # --------------------------------------------------
+  # PROMETHEUS (Monitoring)
+  # Port: 9090
   # --------------------------------------------------
   prometheus:
-    image: prom/prometheus
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    image: prom/prometheus:latest
+    container_name: prometheus
     ports:
       - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # --------------------------------------------------
-  # GRAFANA
+  # GRAFANA (Visualization)
+  # Port: 3001 (changed from 3000 to avoid conflicts)
   # --------------------------------------------------
   grafana:
-    image: grafana/grafana
+    image: grafana/grafana:latest
+    container_name: grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-worldmap-panel
     volumes:
-      - ./monitoring/grafana:/var/lib/grafana"
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - cloud_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   document-data:
   quiz-data:
+  frontend-media:
+  frontend-static:
+  prometheus-data:
+  grafana-data:
 
 networks:
-  default:
+  cloud_network:
     name: cloud_network
+    driver: bridge
