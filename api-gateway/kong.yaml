@@ -15,6 +15,9 @@ services:
       - name: stt-route
         paths:
           - /api/stt
+<<<<<<< HEAD
+          
+=======
 
   - name: document-reader-service
     url: http://document-reader-service:8000
@@ -36,9 +39,14 @@ services:
         paths:
           - /api/quiz
 
+>>>>>>> f042cb48ecd342b4e3991b136f3d6c1b67ff4ce6
   - name: chat-service
     url: http://chat-service:8000
     routes:
       - name: chat-route
         paths:
+<<<<<<< HEAD
           - /api/chat
+=======
+          - /api/chat
+>>>>>>> f042cb48ecd342b4e3991b136f3d6c1b67ff4ce6
