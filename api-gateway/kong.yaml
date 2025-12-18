@@ -15,10 +15,38 @@ services:
       - name: stt-route
         paths:
           - /api/stt
+<<<<<<< HEAD
           
+=======
+
+  - name: document-reader-service
+    url: http://document-reader-service:8000
+    routes:
+      - name: document-reader-routes
+        paths:
+          - /api/documents
+          - /api/documents/
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - DELETE
+
+  - name: quiz-service
+    url: http://quiz-service:8003
+    routes:
+      - name: quiz-route
+        paths:
+          - /api/quiz
+
+>>>>>>> f042cb48ecd342b4e3991b136f3d6c1b67ff4ce6
   - name: chat-service
     url: http://chat-service:8000
     routes:
       - name: chat-route
         paths:
+<<<<<<< HEAD
           - /api/chat
+=======
+          - /api/chat
+>>>>>>> f042cb48ecd342b4e3991b136f3d6c1b67ff4ce6

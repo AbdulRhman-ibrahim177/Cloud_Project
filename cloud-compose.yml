@@ -9,6 +9,8 @@ services:
     depends_on:
       - tts-service
       - stt-service
+      - document-reader-service
+      - quiz-service
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yaml
@@ -41,6 +43,55 @@ services:
       - ./stt-service:/app
 
   # --------------------------------------------------
+  # DOCUMENT READER SERVICE
+  # --------------------------------------------------
+  document-reader-service:
+    build: ./document-reader-service
+    container_name: document-reader-service
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./document-reader-service:/app
+      - document-data:/data/documents
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # --------------------------------------------------
+  # QUIZ SERVICE
+  # --------------------------------------------------
+  quiz-service:
+    build: ./quiz-service
+    container_name: quiz-service
+    ports:
+      - "8004:8003"
+    volumes:
+      - ./quiz-service:/app
+      - quiz-data:/data/quizzes
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Database
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-quiz_service}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      # S3 Storage
+      - S3_BUCKET=${S3_BUCKET:-quiz-service-storage-dev}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4096M
+        reservations:
+          cpus: '1'
+          memory: 2048M
+
+  # --------------------------------------------------
   # PROMETHEUS
   # --------------------------------------------------
   prometheus:
@@ -59,6 +110,10 @@ services:
       - "3000:3000"
     volumes:
       - ./monitoring/grafana:/var/lib/grafana"
+
+volumes:
+  document-data:
+  quiz-data:
 
 networks:
   default:
