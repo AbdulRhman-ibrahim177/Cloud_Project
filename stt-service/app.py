@@ -1,5 +1,10 @@
-from fastapi import FastAPI, UploadFile, File
-from kafka_producer import send_stt_completed
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from kafka_producer import send_stt_request
+import uuid
+from utils.stt_engine import transcribe_audio
+from utils.s3_client import upload_audio
+import os
+from typing import Optional
 
 app = FastAPI(
     title="STT Service",
@@ -7,26 +12,69 @@ app = FastAPI(
 )
 
 # --------------------------
+# IN-MEMORY STORAGE (for testing)
+# --------------------------
+transcriptions_store = {}
+
+# --------------------------
 # API ROUTES
 # --------------------------
 
 @app.post("/api/stt/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
+async def transcribe_audio_endpoint(file: UploadFile = File(...)):
     """
     Receive audio file for transcription → send event to Kafka
     """
-    event = {
-        "transcription_id": "tr_" + file.filename[:5],
-        "filename": file.filename,
-        "content_type": file.content_type
-    }
+    try:
+        # Read file content
+        file_content = await file.read()
+        
+        # Generate unique transcription ID
+        transcription_id = str(uuid.uuid4())
+        
+        # Upload to S3
+        s3_key = upload_audio(file_content, file.filename)
+        
+        # Store in memory
+        transcriptions_store[transcription_id] = {
+            "id": transcription_id,
+            "filename": file.filename,
+            "s3_key": s3_key,
+            "text": "",
+            "status": "queued",
+            "content_type": file.content_type,
+            "file_size": len(file_content)
+        }
+        
+        # Send transcription request to Kafka
+        event = {
+            "transcription_id": transcription_id,
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "s3_key": s3_key,
+            "file_size": len(file_content)
+        }
+        
+        send_stt_request(event)
+        
+        return {
+            "status": "queued",
+            "transcription_id": transcription_id,
+            "message": "STT request queued for processing",
+            "filename": file.filename
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
 
-    send_stt_completed(event)
 
+@app.get("/api/stt/health")
+def health_check():
+    """
+    Health check endpoint
+    """
     return {
-        "status": "queued",
-        "message": "STT request sent to Kafka",
-        "event": event
+        "status": "healthy",
+        "service": "STT Service"
     }
 
 
@@ -35,70 +83,62 @@ def get_transcription(tid: str):
     """
     Retrieve transcription result (later from DB)
     """
-    return {
-        "id": tid,
-        "text": "sample transcription (placeholder)"
-    }
+    if tid not in transcriptions_store:
+        raise HTTPException(status_code=404, detail=f"Transcription {tid} not found")
+    
+    return transcriptions_store[tid]
 
 
 @app.get("/api/stt/transcriptions")
 def list_transcriptions():
     """
-    List all user transcriptions (later from DB)
+    List all user transcriptions
     """
-    return [
-        {"id": "1", "text": "hello world"},
-        {"id": "2", "text": "speech to text example"}
-    ]
-from fastapi import FastAPI, UploadFile, File
-from kafka_producer import send_stt_completed
+    return list(transcriptions_store.values())
 
-app = FastAPI(
-    title="STT Service",
-    version="1.0"
-)
 
-# --------------------------
-# API ROUTES
-# --------------------------
-
-@app.post("/api/stt/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
+@app.put("/api/stt/transcription/{tid}")
+def update_transcription(tid: str, text: Optional[str] = None, status: Optional[str] = None):
     """
-    Receive audio file for transcription → send event to Kafka
+    Update transcription result
     """
-    event = {
-        "transcription_id": "tr_" + file.filename[:5],
-        "filename": file.filename,
-        "content_type": file.content_type
-    }
+    try:
+        if tid not in transcriptions_store:
+            raise HTTPException(status_code=404, detail=f"Transcription {tid} not found")
+        
+        # Update fields
+        if text is not None:
+            transcriptions_store[tid]["text"] = text
+        if status is not None:
+            transcriptions_store[tid]["status"] = status
+        
+        return {
+            "status": "updated",
+            "transcription": transcriptions_store[tid]
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error updating transcription: {str(e)}")
 
-    send_stt_completed(event)
 
-    return {
-        "status": "queued",
-        "message": "STT request sent to Kafka",
-        "event": event
-    }
-
-
-@app.get("/api/stt/transcription/{tid}")
-def get_transcription(tid: str):
+@app.delete("/api/stt/transcription/{tid}")
+def delete_transcription(tid: str):
     """
-    Retrieve transcription result (later from DB)
+    Delete transcription record
     """
-    return {
-        "id": tid,
-        "text": "sample transcription (placeholder)"
-    }
-
-
-@app.get("/api/stt/transcriptions")
-def list_transcriptions():
-    """
-    List all user transcriptions (later from DB)
-    """
-    return [
-        {"id": "1", "text": "hello world"},
-        {"id": "2", "text": "speech to text example"}
-    ]
+    try:
+        if tid not in transcriptions_store:
+            raise HTTPException(status_code=404, detail=f"Transcription {tid} not found")
+        
+        deleted = transcriptions_store.pop(tid)
+        
+        return {
+            "status": "deleted",
+            "transcription_id": tid,
+            "message": "Transcription deleted successfully"
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error deleting transcription: {str(e)}")

@@ -1,3 +1,17 @@
 aws:
   bucket: stt-service-storage-dev
   region: us-east-1
+kafka:
+  brokers:
+    - localhost:39092
+    - localhost:39093
+    - localhost:39094
+  topics:
+    request: audio.transcription.requested
+    completed: audio.transcription.completed
+  group_id: stt-service-group
+
+service:
+  port: 8003
+  host: 0.0.0.0
+  workers: 1

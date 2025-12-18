@@ -1,0 +1,1 @@
+# stt-service init file
